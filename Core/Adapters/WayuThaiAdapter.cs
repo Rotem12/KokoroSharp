@@ -66,7 +66,15 @@ public sealed class WayuThaiAdapter : IModelAdapter
 
         this.modelDirectory = Path.GetFullPath(modelDirectory);
         this.frontend = frontend;
-        this.descriptor = descriptor ?? CreateDefaultDescriptor();
+        var resolvedDescriptor = descriptor ?? CreateDefaultDescriptor();
+        if (frontend is not null)
+        {
+            resolvedDescriptor = resolvedDescriptor with
+            {
+                Capabilities = resolvedDescriptor.Capabilities | AdapterCapabilities.RawText
+            };
+        }
+        this.descriptor = resolvedDescriptor;
         ValidateDescriptor(this.descriptor);
         voicePackPath = RequireFile("voicepacks.npz");
         vocabulary = LoadVocabulary(RequireFile("onnx_manifest.json"));
