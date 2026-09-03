@@ -10,6 +10,7 @@ public sealed record FrontendResult
     public string Phonemes { get; init; } = string.Empty;
     public IReadOnlyList<int> TokenIds { get; init; } = Array.Empty<int>();
     public float Coverage { get; init; } = 1f;
+    public bool UsedFallback { get; init; }
     public IReadOnlyList<string> DroppedSymbols { get; init; } = Array.Empty<string>();
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 }

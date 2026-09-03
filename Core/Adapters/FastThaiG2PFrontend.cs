@@ -97,6 +97,7 @@ public sealed class FastThaiG2PFrontend : ITextFrontend
         var droppedWords = new HashSet<string>(StringComparer.Ordinal);
         var sourceWords = 0;
         var convertedWords = 0;
+        var usedFallback = false;
 
         foreach (var token in Tokenize(normalized))
         {
@@ -110,8 +111,11 @@ public sealed class FastThaiG2PFrontend : ITextFrontend
                 continue;
 
             sourceWords++;
-            if (!ipaByWord.TryGetValue(token, out var ipa))
-                ipa = fallback?.Invoke(token);
+            if (!ipaByWord.TryGetValue(token, out var ipa) && fallback is not null)
+            {
+                ipa = fallback(token);
+                usedFallback |= !string.IsNullOrWhiteSpace(ipa);
+            }
 
             if (string.IsNullOrWhiteSpace(ipa))
             {
@@ -139,11 +143,14 @@ public sealed class FastThaiG2PFrontend : ITextFrontend
             warnings.Add($"No FastThaiG2P pronunciation was available for {droppedWords.Count} Thai word(s).");
         if (fallback is null)
             warnings.Add("This frontend is dictionary-only; OOV Thai requires an explicit native fallback.");
+        else if (usedFallback)
+            warnings.Add("The configured OOV fallback was used; pronunciation quality is model- and fallback-dependent.");
 
         var coverage = sourceWords == 0 ? 1f : convertedWords / (float)sourceWords;
         return result with
         {
             Coverage = Math.Min(coverage, result.Coverage),
+            UsedFallback = usedFallback || result.UsedFallback,
             DroppedSymbols = droppedWords.Count == 0
                 ? result.DroppedSymbols
                 : [.. new HashSet<string>(result.DroppedSymbols, StringComparer.Ordinal).Concat(droppedWords)],
