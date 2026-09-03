@@ -55,6 +55,58 @@ public sealed class StandardKokoroAdapter : IModelAdapter
         model = new KokoroModel(modelPath, options, this.graphOptions);
     }
 
+    /// <summary>
+    /// Creates a standard adapter from a manifest that describes one
+    /// Kokoro-compatible graph. The concrete model and voice paths remain
+    /// explicit so install/catalog code can resolve verified local artifacts.
+    /// </summary>
+    public static StandardKokoroAdapter FromManifest(
+        string modelPath,
+        ModelManifest manifest,
+        string voicesPath = null,
+        IEnumerable<VoiceDescriptor> voices = null,
+        ITextFrontend frontend = null,
+        SessionOptions options = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
+        ArgumentNullException.ThrowIfNull(manifest);
+        if (manifest.Tier != AdapterTier.Standard)
+            throw new ArgumentException("The manifest must describe a standard one-graph adapter.", nameof(manifest));
+        if (manifest.Graphs is not { Count: 1 } || manifest.Graphs[0] is null)
+            throw new InvalidDataException("A standard adapter manifest must contain exactly one graph.");
+
+        var graph = manifest.Graphs[0];
+        var graphOptions = KokoroGraphOptions.FromManifest(graph);
+        var descriptor = new ModelDescriptor
+        {
+            Id = manifest.Id,
+            Family = manifest.Family,
+            AdapterId = manifest.AdapterId,
+            Tier = manifest.Tier,
+            Revision = manifest.Revision,
+            LanguageCodes = manifest.LanguageCodes is null
+                ? Array.Empty<string>()
+                : manifest.LanguageCodes,
+            SampleRate = manifest.Audio?.SampleRate ?? 0,
+            Channels = manifest.Audio?.Channels ?? 0,
+            Capabilities = manifest.Capabilities,
+            License = manifest.License?.Name ?? string.Empty,
+            LicenseUrl = manifest.License?.Url ?? string.Empty,
+            Attribution = manifest.License?.Attribution ?? string.Empty,
+            CommercialUse = manifest.License?.CommercialUse,
+            ReviewStatus = manifest.License?.ReviewStatus ?? "unreviewed"
+        };
+
+        return new StandardKokoroAdapter(
+            modelPath,
+            voicesPath,
+            descriptor,
+            voices,
+            frontend,
+            options,
+            graphOptions);
+    }
+
     public ModelDescriptor Describe() => descriptor;
 
     public IReadOnlyList<VoiceDescriptor> GetVoices(
@@ -162,7 +214,7 @@ public sealed class StandardKokoroAdapter : IModelAdapter
         var stopwatch = Stopwatch.StartNew();
         var samples = new List<float>();
         var timings = new List<PhonemeTiming>();
-        foreach (var segment in SplitIntoSafeSegments(tokenIds))
+        foreach (var segment in SplitIntoSafeSegments(tokenIds, graphOptions.MaxTokens))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var rawSegmentSamples = model.Infer(segment, voice.Features, request.Speed, out var paddedDurations);
@@ -242,11 +294,13 @@ public sealed class StandardKokoroAdapter : IModelAdapter
         RealTimeFactor = null
     };
 
-    private static IEnumerable<int[]> SplitIntoSafeSegments(IReadOnlyList<int> tokenIds)
+    private static IEnumerable<int[]> SplitIntoSafeSegments(
+        IReadOnlyList<int> tokenIds,
+        int maxTokens)
     {
-        for (var offset = 0; offset < tokenIds.Count; offset += KokoroModel.maxTokens)
+        for (var offset = 0; offset < tokenIds.Count; offset += maxTokens)
         {
-            var length = Math.Min(KokoroModel.maxTokens, tokenIds.Count - offset);
+            var length = Math.Min(maxTokens, tokenIds.Count - offset);
             var segment = new int[length];
             for (var i = 0; i < length; i++)
                 segment[i] = tokenIds[offset + i];

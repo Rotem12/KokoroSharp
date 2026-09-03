@@ -48,9 +48,9 @@ public sealed class KokoroModel : IDisposable {
             Debug.WriteLine("Received empty input token array. Returning empty float array.");
             return [];
         }
-        if (tokens.Length > maxTokens) {
-            Debug.WriteLine($"Max token count the model supports is {maxTokens}, but got {tokens.Length}. Please segment your input when passing longer sequences. Trimming to {maxTokens}.");
-            Array.Resize(ref tokens, T = maxTokens);
+        if (tokens.Length > graphOptions.MaxTokens) {
+            Debug.WriteLine($"Max token count the model supports is {graphOptions.MaxTokens}, but got {tokens.Length}. Please segment your input when passing longer sequences. Trimming to {graphOptions.MaxTokens}.");
+            Array.Resize(ref tokens, T = graphOptions.MaxTokens);
         }
 
         var tokenTensor = new DenseTensor<long>([B, T + 2]); // <start>{text}<end>

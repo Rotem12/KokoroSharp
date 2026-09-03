@@ -13,6 +13,12 @@ using KokoroSharp.Adapters;
 /// </remarks>
 public sealed record KokoroGraphOptions
 {
+    /// <summary>
+    /// Maximum number of model tokens before BOS/EOS are added. Standard
+    /// Kokoro exports use 510; a manifest may lower this for a compatible
+    /// single-graph export with a smaller context window.
+    /// </summary>
+    public int MaxTokens { get; init; } = KokoroModel.maxTokens;
     public string TokenInputName { get; init; } = "tokens";
     public string StyleInputName { get; init; } = "style";
     public string SpeedInputName { get; init; } = "speed";
@@ -30,6 +36,7 @@ public sealed record KokoroGraphOptions
 
         var options = new KokoroGraphOptions
         {
+            MaxTokens = graph.MaxTokens > 0 ? graph.MaxTokens : KokoroModel.maxTokens,
             TokenInputName = Require(graph.Inputs, "tokens", graph.Id),
             StyleInputName = Require(graph.Inputs, "style", graph.Id),
             SpeedInputName = Require(graph.Inputs, "speed", graph.Id),
@@ -44,6 +51,8 @@ public sealed record KokoroGraphOptions
     /// <summary>Validates the names needed by a standard one-graph call.</summary>
     public void Validate()
     {
+        if (MaxTokens <= 0)
+            throw new ArgumentOutOfRangeException(nameof(MaxTokens), "A standard Kokoro graph must allow at least one model token.");
         if (string.IsNullOrWhiteSpace(TokenInputName))
             throw new InvalidDataException("A standard Kokoro graph requires a token input name.");
         if (string.IsNullOrWhiteSpace(StyleInputName))
