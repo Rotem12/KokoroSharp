@@ -61,9 +61,22 @@ public sealed class GraphManifest
     public string Path { get; init; } = string.Empty;
     public string Provider { get; init; } = string.Empty;
     public int MaxTokens { get; init; }
+
+    /// <summary>
+    /// Maps semantic input names (for example, <c>tokens</c>, <c>style</c>,
+    /// and <c>speed</c>) to the actual ONNX tensor names.
+    /// </summary>
     public Dictionary<string, string> Inputs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Maps semantic output names to the actual ONNX tensor names.</summary>
     public Dictionary<string, string> Outputs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, string> DerivedInputs { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the host must remove the graph's static BOS/EOS boundary audio
+    /// using the standard adapter's managed trimming policy.
+    /// </summary>
+    public bool TrimBoundaryTokens { get; init; }
 }
 
 public sealed class ArtifactManifest

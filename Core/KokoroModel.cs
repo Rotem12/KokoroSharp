@@ -21,6 +21,7 @@ public sealed class KokoroModel : IDisposable {
         SessionOptions options = null,
         KokoroGraphOptions graphOptions = null) {
         this.graphOptions = graphOptions ?? new KokoroGraphOptions();
+        this.graphOptions.Validate();
         session = new InferenceSession(modelPath, options ?? defaultOptions);
     }
 

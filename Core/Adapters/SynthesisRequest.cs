@@ -12,12 +12,23 @@ public sealed record SynthesisRequest
     public float Speed { get; init; } = 1f;
     public int? RequestedSampleRate { get; init; }
 
+    /// <summary>
+    /// Minimum frontend coverage required before inference is allowed. Keep
+    /// this at zero for legacy best-effort behavior; set it to 1 for a
+    /// fail-closed catalog path that must not synthesize dropped text.
+    /// </summary>
+    public float MinimumFrontendCoverage { get; init; }
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(VoiceId))
             throw new ArgumentException("A voice id is required.", nameof(VoiceId));
         if (!float.IsFinite(Speed) || Speed <= 0)
             throw new ArgumentOutOfRangeException(nameof(Speed));
+        if (!float.IsFinite(MinimumFrontendCoverage) ||
+            MinimumFrontendCoverage < 0 ||
+            MinimumFrontendCoverage > 1)
+            throw new ArgumentOutOfRangeException(nameof(MinimumFrontendCoverage));
 
         int inputKinds = 0;
         if (!string.IsNullOrWhiteSpace(Text))

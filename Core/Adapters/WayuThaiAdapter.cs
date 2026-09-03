@@ -279,6 +279,7 @@ public sealed class WayuThaiAdapter : IModelAdapter
             if (frontend is null)
                 throw new NotSupportedException("Raw Thai text requires a model-matched native ITextFrontend; use PrePhonemes until it is supplied.");
             var result = frontend.Process(request.Text, voice.LanguageCode, cancellationToken);
+            FrontendCoverageGuard.Ensure(result, request.MinimumFrontendCoverage);
             return ([.. result.TokenIds], result);
         }
 
@@ -287,6 +288,7 @@ public sealed class WayuThaiAdapter : IModelAdapter
             if (frontend is not null)
             {
                 var result = frontend.FromPhonemes(request.PrePhonemes, voice.LanguageCode, cancellationToken);
+                FrontendCoverageGuard.Ensure(result, request.MinimumFrontendCoverage);
                 return ([.. result.TokenIds], result);
             }
             return EncodePhonemes(request.PrePhonemes, voice.LanguageCode);

@@ -127,11 +127,13 @@ public sealed class StandardKokoroAdapter : IModelAdapter
         if (!string.IsNullOrWhiteSpace(request.Text))
         {
             frontendResult = frontend.Process(request.Text, languageCode, cancellationToken);
+            FrontendCoverageGuard.Ensure(frontendResult, request.MinimumFrontendCoverage);
             tokenIds = [.. frontendResult.TokenIds];
         }
         else if (!string.IsNullOrWhiteSpace(request.PrePhonemes))
         {
             frontendResult = frontend.FromPhonemes(request.PrePhonemes, languageCode, cancellationToken);
+            FrontendCoverageGuard.Ensure(frontendResult, request.MinimumFrontendCoverage);
             tokenIds = [.. frontendResult.TokenIds];
         }
         else
