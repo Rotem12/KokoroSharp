@@ -275,14 +275,33 @@ public sealed class FastThaiG2PFrontend : ITextFrontend
                 continue;
             }
 
-            var start = index++;
-            while (index < text.Length && IsCombiningMark(text[index]))
+            if (!IsThaiBlockCharacter(text[index]))
+            {
+                yield return text[index].ToString();
                 index++;
+                continue;
+            }
+
+            // Keep an unmatched Thai run together. Splitting an OOV word into
+            // single characters prevents any native syllable fallback from
+            // seeing the orthographic context it needs for consonant class,
+            // vowel form, final consonant, and tone assignment. Stop before a
+            // dictionary match so known words in mixed text retain the fast
+            // longest-match path.
+            var start = index++;
+            while (index < text.Length && IsThaiBlockCharacter(text[index]))
+            {
+                if (dictionary.TryMatch(text, index, out _, out _))
+                    break;
+                index++;
+            }
             yield return text[start..index];
         }
     }
 
     private static bool ContainsThai(string value) => value.Any(character => character is >= 'ก' and <= '๛');
+
+    private static bool IsThaiBlockCharacter(char value) => value is >= '\u0E00' and <= '\u0E7F';
 
     private static bool IsCombiningMark(char value) =>
         CharUnicodeInfo.GetUnicodeCategory(value) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark;
