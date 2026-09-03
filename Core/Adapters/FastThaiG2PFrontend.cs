@@ -92,7 +92,7 @@ public sealed class FastThaiG2PFrontend : ITextFrontend
             };
         }
 
-        var normalized = NormalizeText(text);
+        var normalized = FastThaiTextNormalizer.Normalize(text);
         var phonemeBuilder = new StringBuilder(normalized.Length * 2);
         var droppedWords = new HashSet<string>(StringComparer.Ordinal);
         var sourceWords = 0;
@@ -280,22 +280,6 @@ public sealed class FastThaiG2PFrontend : ITextFrontend
                 index++;
             yield return text[start..index];
         }
-    }
-
-    private static string NormalizeText(string text)
-    {
-        var normalized = text.Normalize(NormalizationForm.FormC);
-        var builder = new StringBuilder(normalized.Length);
-        foreach (var character in normalized)
-        {
-            if (character is >= '๐' and <= '๙')
-                builder.Append((char)('0' + character - '๐'));
-            else if (char.IsWhiteSpace(character))
-                builder.Append(' ');
-            else
-                builder.Append(character);
-        }
-        return builder.ToString().Trim();
     }
 
     private static bool ContainsThai(string value) => value.Any(character => character is >= 'ก' and <= '๛');
