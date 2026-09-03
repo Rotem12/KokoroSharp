@@ -11,11 +11,16 @@ using System.Diagnostics;
 public sealed class KokoroModel : IDisposable {
     readonly InferenceSession session;
     readonly SessionOptions defaultOptions = new() { EnableMemoryPattern = true, InterOpNumThreads = 8, IntraOpNumThreads = 8 };
+    readonly KokoroGraphOptions graphOptions;
     bool _isDisposed;
 
     public const int maxTokens = 510;
 
-    public KokoroModel(string modelPath, SessionOptions options = null) {
+    public KokoroModel(
+        string modelPath,
+        SessionOptions options = null,
+        KokoroGraphOptions graphOptions = null) {
+        this.graphOptions = graphOptions ?? new KokoroGraphOptions();
         session = new InferenceSession(modelPath, options ?? defaultOptions);
     }
 
@@ -59,12 +64,23 @@ public sealed class KokoroModel : IDisposable {
         for (int j = 0; j < C; j++) { styleTensor[0, j] = voiceStyle[styleIndex, 0, j]; }
         for (int i = 0; i < inputTokens.Length; i++) { tokenTensor[0, i] = (inputTokens[i] >= 0 ? inputTokens[i] : 4); } // [unk] --> '.'
 
-        var inputs = new List<NamedOnnxValue> { GetOnnxValue("tokens", tokenTensor), GetOnnxValue("style", styleTensor), GetOnnxValue("speed", speedTensor) };
+        var inputs = new List<NamedOnnxValue> {
+            GetOnnxValue(graphOptions.TokenInputName, tokenTensor),
+            GetOnnxValue(graphOptions.StyleInputName, styleTensor),
+            GetOnnxValue(graphOptions.SpeedInputName, speedTensor)
+        };
         lock (session) {
             if (_isDisposed) { return []; }
             using var results = session.Run(inputs);
-            if (results.FirstOrDefault(x => x.Name == "durations") is { } durations) { paddedTokenDurations = [.. durations.AsTensor<long>().Select(x => (int) x)]; }
-            return [.. results[0].AsTensor<float>()];
+            if (!string.IsNullOrWhiteSpace(graphOptions.DurationOutputName) &&
+                results.FirstOrDefault(x => x.Name == graphOptions.DurationOutputName) is { } durations) {
+                paddedTokenDurations = [.. durations.AsTensor<long>().Select(x => (int) x)];
+            }
+            var waveform = string.IsNullOrWhiteSpace(graphOptions.WaveformOutputName)
+                ? results[0]
+                : results.FirstOrDefault(x => x.Name == graphOptions.WaveformOutputName)
+                    ?? throw new InvalidOperationException($"The ONNX graph did not return '{graphOptions.WaveformOutputName}'.");
+            return [.. waveform.AsTensor<float>()];
         }
         NamedOnnxValue GetOnnxValue<T>(string name, DenseTensor<T> val) => NamedOnnxValue.CreateFromTensor(name, val);
     }

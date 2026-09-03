@@ -25,6 +25,7 @@ public sealed class StandardKokoroAdapter : IModelAdapter
     private readonly KokoroModel model;
     private readonly string voicesPath;
     private readonly ITextFrontend frontend;
+    private readonly KokoroGraphOptions graphOptions;
     private readonly ModelDescriptor descriptor;
     private readonly IReadOnlyList<VoiceDescriptor> voiceDescriptors;
     private readonly Dictionary<string, KokoroVoice> loadedVoices = new(StringComparer.OrdinalIgnoreCase);
@@ -37,7 +38,8 @@ public sealed class StandardKokoroAdapter : IModelAdapter
         ModelDescriptor descriptor = null,
         IEnumerable<VoiceDescriptor> voices = null,
         ITextFrontend frontend = null,
-        SessionOptions options = null)
+        SessionOptions options = null,
+        KokoroGraphOptions graphOptions = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
         if (!File.Exists(modelPath))
@@ -45,11 +47,12 @@ public sealed class StandardKokoroAdapter : IModelAdapter
 
         this.voicesPath = Path.GetFullPath(voicesPath ?? Path.Combine(AppContext.BaseDirectory, "voices"));
         this.frontend = frontend ?? new KokoroTextFrontend();
+        this.graphOptions = graphOptions ?? new KokoroGraphOptions();
         this.descriptor = descriptor ?? CreateDefaultDescriptor();
         ValidateDescriptor(this.descriptor);
         voiceDescriptors = (voices ?? CreateStockVoiceDescriptors(this.voicesPath)).ToArray();
         ValidateVoices(voiceDescriptors);
-        model = new KokoroModel(modelPath, options);
+        model = new KokoroModel(modelPath, options, this.graphOptions);
     }
 
     public ModelDescriptor Describe() => descriptor;
@@ -160,17 +163,28 @@ public sealed class StandardKokoroAdapter : IModelAdapter
         foreach (var segment in SplitIntoSafeSegments(tokenIds))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var segmentSamples = model.Infer(segment, voice.Features, request.Speed, out var paddedDurations);
+            var rawSegmentSamples = model.Infer(segment, voice.Features, request.Speed, out var paddedDurations);
+            var segmentSamples = rawSegmentSamples;
+            var trimStartSamples = 0;
+            if (graphOptions.TrimBoundaryTokens)
+            {
+                segmentSamples = KokoroBoundaryTrimmer.Trim(
+                    segmentSamples,
+                    paddedDurations,
+                    descriptor.SampleRate,
+                    out trimStartSamples);
+            }
             var segmentStartSecond = samples.Count / (double) descriptor.SampleRate;
             samples.AddRange(segmentSamples);
 
-            var segmentTimings = PhonemeTimestamp.FromModelOutput(segment, paddedDurations, segmentSamples.Length);
+            var segmentTimings = PhonemeTimestamp.FromModelOutput(segment, paddedDurations, rawSegmentSamples.Length);
             foreach (var timing in segmentTimings ?? [])
             {
+                var trimOffsetSecond = trimStartSamples / (double) descriptor.SampleRate;
                 timings.Add(new PhonemeTiming(
                     timing.Phoneme.ToString(),
-                    segmentStartSecond + timing.StartSecond,
-                    segmentStartSecond + timing.EndSecond));
+                    segmentStartSecond + Math.Max(0, timing.StartSecond - trimOffsetSecond),
+                    segmentStartSecond + Math.Max(0, timing.EndSecond - trimOffsetSecond)));
             }
         }
         stopwatch.Stop();
