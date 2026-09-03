@@ -12,13 +12,24 @@ using System.Diagnostics;
 
 /// <summary> Class that allows synthesizing audio without speaking it. </summary>
 public partial class KokoroWavSynthesizer : KokoroEngine {
+    private static readonly int[] WarmupTokens = [4];
     KokoroTTSPipelineConfig defaultPipelineConfig = new(new DefaultSegmentationConfig() { MaxFirstSegmentLength = 510 });
 
     /// <summary> Creates a new instance that allows synthesizing audio without speaking it. </summary>
     public KokoroWavSynthesizer(string modelPath, SessionOptions options = null) : base(modelPath, options) { }
 
+    /// <summary> Runs a tiny inference to initialize ONNX Runtime/model caches without producing user-visible audio. </summary>
+    public void Prewarm(KokoroVoice voice, float speed = 1) {
+        ArgumentNullException.ThrowIfNull(voice);
+        model.Prewarm(WarmupTokens, voice.Features, speed);
+    }
+
     /// <summary> Inferences with the model to speak the text with specified voice after segmenting it, and returns the bytes that the total audio consists of. </summary>
-    public byte[] Synthesize(string text, KokoroVoice voice, KokoroTTSPipelineConfig pipelineConfig = null) => Task.Run(() => SynthesizeAsync(text, voice, pipelineConfig)).Result;
+    // Preserve the original failure rather than wrapping it in AggregateException.
+    // The synchronous API only waits for the asynchronous job; it does not need
+    // another Task.Run wrapper.
+    public byte[] Synthesize(string text, KokoroVoice voice, KokoroTTSPipelineConfig pipelineConfig = null) =>
+        SynthesizeAsync(text, voice, pipelineConfig).GetAwaiter().GetResult();
 
     /// <summary> Inferences with the model to speak the text with specified voice after segmenting it, and returns the bytes that the total audio consists of. </summary>
     public async Task<byte[]> SynthesizeAsync(string text, KokoroVoice voice, KokoroTTSPipelineConfig pipelineConfig = null) => (await SynthesizeWithTimestampsAsync(text, voice, pipelineConfig)).AudioBytes;
@@ -29,7 +40,13 @@ public partial class KokoroWavSynthesizer : KokoroEngine {
     public void Synthesize(string text, KokoroVoice voice, Action<float[]> OnProgress, Action OnComplete, KokoroTTSPipelineConfig pipelineConfig = null) {
         pipelineConfig ??= defaultPipelineConfig;
         var tokens = Tokenizer.Tokenize(text.Trim(), voice.GetLangCode(), pipelineConfig.PreprocessText);
-        var segments = pipelineConfig.SegmentationFunc(tokens);
+        var segments = pipelineConfig.SegmentationFunc(tokens)
+            .Where(segment => segment is { Length: > 0 })
+            .ToList();
+        if (segments.Count == 0) {
+            OnComplete?.Invoke();
+            return;
+        }
         var job = EnqueueJob(KokoroJob.Create(segments, voice, pipelineConfig.Speed, null));
 
         foreach (var step in job.Steps) {
@@ -44,7 +61,15 @@ public partial class KokoroWavSynthesizer : KokoroEngine {
     public async Task<(byte[] AudioBytes, PhonemeTimestamp[] Timestamps)> SynthesizeWithTimestampsAsync(string text, KokoroVoice voice, KokoroTTSPipelineConfig pipelineConfig = null) {
         pipelineConfig ??= defaultPipelineConfig;
         var tokens = Tokenizer.Tokenize(text.Trim(), voice.GetLangCode(), pipelineConfig.PreprocessText);
-        var segments = pipelineConfig.SegmentationFunc(tokens);
+        if (tokens.Length == 0) {
+            return ([], []);
+        }
+        var segments = pipelineConfig.SegmentationFunc(tokens)
+            .Where(segment => segment is { Length: > 0 })
+            .ToList();
+        if (segments.Count == 0) {
+            return ([], []);
+        }
         var job = EnqueueJob(KokoroJob.Create(segments, voice, pipelineConfig.Speed, null));
 
         List<byte> bytes = [];

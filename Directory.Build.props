@@ -11,4 +11,20 @@
         <RepositoryUrl>https://github.com/Lyrcaxis/KokoroSharp</RepositoryUrl>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
     </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- Keep generated verification/build trees out of this project graph. -->
+        <DefaultItemExcludes>
+            $(DefaultItemExcludes);
+            **\.codex-build\**;
+            **\artifacts\**;
+            **\bin\**;
+            **\bin_*\**;
+            **\obj\**;
+            **\obj_*\**;
+            **\tmp\**;
+            **\temp\**;
+            **\tts-store-capture-build-*\**
+        </DefaultItemExcludes>
+    </PropertyGroup>
 </Project>

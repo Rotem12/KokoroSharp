@@ -16,6 +16,9 @@ public static class SegmentationSystem {
     /// <summary> Turns the input tokens into multiple segments, then returns the segments in a list. Line breaks ALWAYS end a segment, and a line that fits its budget stays whole. </summary>
     /// <remarks> Oversized lines get cut at their latest sentence end within budget, then latest comma, then latest space. Only the first segment has a smaller budget, for quicker playback start. </remarks>
     public static List<int[]> SplitToSegments(int[] tokens, DefaultSegmentationConfig segmentationStrategy) {
+        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(segmentationStrategy);
+        if (tokens.Length == 0) { return []; }
         List<int[]> segments = [];
         for (int at = 0; at < tokens.Length;) {
             if (tokens[at] == SpaceToken) { at++; continue; }
@@ -27,7 +30,7 @@ public static class SegmentationSystem {
                 foreach (var cuts in cutPreference) {
                     if (Array.FindLastIndex(tokens, at + budget - 1, budget, t => cuts.Contains(t)) is var found && found >= at) { end = found + 1; break; }
                 }
-                while (end - at < KokoroModel.maxTokens && tokens[end] != NLToken && PunctuationTokens.Contains(tokens[end])) { end++; }
+                while (end < tokens.Length && end - at < KokoroModel.maxTokens && tokens[end] != NLToken && PunctuationTokens.Contains(tokens[end])) { end++; }
             }
             while (end < tokens.Length && (tokens[end] == NLToken || tokens[end] == SpaceToken)) { end++; } // Paragraph gaps ride with the previous segment, as a longer pause.
             int stop = end;

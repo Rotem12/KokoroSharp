@@ -5,6 +5,7 @@ using KokoroSharp.Utilities;
 using MisakiSharp;
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -87,6 +88,7 @@ public static partial class Tokenizer {
     /// <summary> Normalizes the input text to what the Kokoro model would expect to see, preparing it for phonemization. </summary>
     /// <remarks> In addition, converts various "written" text to "spoken" form (e.g. $1 --> "one dollar" instead of "dollar one". </remarks>
     internal static string PreprocessText(string text, string langCode = "en-us") {
+        text = RemoveNonSpeechUnicode(text);
         text = HeaderLink().Replace(text, "$1"); // Discard links appearing in `[Header](link)` format.
         text = HeaderImgLink().Replace(text, "$1$2"); // And in [Header[(img](link)]
         text = Money().Replace(text, "$2 $1 $3"); // Convert money amounts like "$1.50" to "1 $ 50".
@@ -147,6 +149,45 @@ public static partial class Tokenizer {
         for (int i = 0; i < 10; i++) { text = text.Replace("  ", " "); }
 
         return text.Trim();
+    }
+
+    // Emoji, variation selectors, zero-width formatting characters and private-use
+    // glyphs cannot be represented by Kokoro's phoneme vocabulary. Keep normal
+    // letters, numbers, punctuation and IPA literals, but turn non-speech symbols
+    // into a word boundary so "hello😀world" is still spoken as two words.
+    private static string RemoveNonSpeechUnicode(string text) {
+        if (string.IsNullOrEmpty(text)) { return text ?? string.Empty; }
+
+        var result = new StringBuilder(text.Length);
+        foreach (Rune rune in text.EnumerateRunes()) {
+            if (rune.Value <= char.MaxValue && Vocab.ContainsKey((char) rune.Value)) {
+                result.Append(rune.ToString());
+                continue;
+            }
+
+            UnicodeCategory category = Rune.GetUnicodeCategory(rune);
+            bool supported = category is
+                UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter or
+                UnicodeCategory.TitlecaseLetter or UnicodeCategory.ModifierLetter or
+                UnicodeCategory.OtherLetter or UnicodeCategory.DecimalDigitNumber or
+                UnicodeCategory.LetterNumber or UnicodeCategory.OtherNumber or
+                UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or
+                UnicodeCategory.EnclosingMark or UnicodeCategory.SpaceSeparator or
+                UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator or
+                UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation or
+                UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation or
+                UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation or
+                UnicodeCategory.OtherPunctuation or UnicodeCategory.MathSymbol or
+                UnicodeCategory.CurrencySymbol;
+            if (supported) {
+                result.Append(rune.ToString());
+            }
+            else if (result.Length > 0 && !char.IsWhiteSpace(result[^1])) {
+                result.Append(' ');
+            }
+        }
+
+        return result.ToString();
     }
 
     #region Regexes

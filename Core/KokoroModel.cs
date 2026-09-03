@@ -23,9 +23,19 @@ public sealed class KokoroModel : IDisposable {
     /// <remarks> Synchronously waits for the output (audio samples), and returns them when ready. Best used in async context. </remarks>
     public float[] Infer(int[] tokens, float[,,] voiceStyle, float speed = 1) => Infer(tokens, voiceStyle, speed, out _);
 
+    /// <summary> Runs a small inference to initialize ONNX Runtime/model caches before the first user-visible synthesis. </summary>
+    public void Prewarm(int[] tokens, float[,,] voiceStyle, float speed = 1) {
+        _ = Infer(tokens, voiceStyle, speed);
+    }
+
     /// <summary> Requests inference with the Model via the ONNX runtime, with specified tokens, style, and speed. </summary>
     /// <remarks> 'paddedTokenDurations' gets the model's duration units for each of &lt;start&gt;{tokens}&lt;end&gt;, or null if the model doesn't output durations. </remarks>
     public float[] Infer(int[] tokens, float[,,] voiceStyle, float speed, out int[] paddedTokenDurations) {
+        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(voiceStyle);
+        if (voiceStyle.GetLength(0) <= 0 || voiceStyle.GetLength(1) <= 0 || voiceStyle.GetLength(2) <= 0) {
+            throw new ArgumentException("Voice style must contain at least one style row, channel, and feature.", nameof(voiceStyle));
+        }
         paddedTokenDurations = null;
         var (B, T, C) = (1, tokens.Length, voiceStyle.GetLength(2));
         if (tokens.Length == 0) {
@@ -45,7 +55,8 @@ public sealed class KokoroModel : IDisposable {
         var inputTokens = new int[T + 2]; // Initialized with all zeroes (<pad>).
         Array.Copy(tokens, 0, inputTokens, 1, T); // [0] and [^1] stay as zeroes.
 
-        for (int j = 0; j < C; j++) { styleTensor[0, j] = voiceStyle[T - 1, 0, j]; }
+        var styleIndex = Math.Min(T - 1, voiceStyle.GetLength(0) - 1);
+        for (int j = 0; j < C; j++) { styleTensor[0, j] = voiceStyle[styleIndex, 0, j]; }
         for (int i = 0; i < inputTokens.Length; i++) { tokenTensor[0, i] = (inputTokens[i] >= 0 ? inputTokens[i] : 4); } // [unk] --> '.'
 
         var inputs = new List<NamedOnnxValue> { GetOnnxValue("tokens", tokenTensor), GetOnnxValue("style", styleTensor), GetOnnxValue("speed", speedTensor) };
